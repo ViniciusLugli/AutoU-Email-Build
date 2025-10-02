@@ -1,0 +1,3 @@
+.env.docker
+a.txt
+docker-compose-azure.yml
