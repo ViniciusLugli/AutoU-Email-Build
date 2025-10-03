@@ -1,52 +1,32 @@
-FROM python:3.11-slim AS build
+FROM python:3.13-slim
+
+LABEL maintainer="ViniciusLugli <vinicius@example.com>"
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1
+    PYTHONUNBUFFERED=1 \
+    POETRY_VIRTUALENVS_CREATE=false
 
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    gcc \
-    libpq-dev \
-    libffi-dev \
-    curl \
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+       build-essential \
+       libpoppler-cpp-dev \
+       poppler-utils \
+       gcc \
     && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt ./
+COPY requirements.txt /app/requirements.txt
 
-RUN python -m venv /opt/venv
-ENV PATH="/opt/venv/bin:$PATH"
+RUN pip install --no-cache-dir -r /app/requirements.txt
 
-RUN pip install --upgrade pip setuptools wheel
-RUN pip install --no-cache-dir -r requirements.txt
+COPY ./app /app/app
+COPY alembic.ini /app/alembic.ini
+COPY alembic /app/alembic
 
-COPY . /app
+RUN useradd --create-home appuser && chown -R appuser:appuser /app
+USER appuser
 
-FROM python:3.11-slim
-ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1
+EXPOSE 8000
 
-WORKDIR /app
-
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    libpq5 \
-    curl \
-    && rm -rf /var/lib/apt/lists/*
-
-COPY --from=build /opt/venv /opt/venv
-ENV PATH="/opt/venv/bin:$PATH"
-
-COPY --from=build /app /app
-
-RUN mkdir -p /app/logs
-
-ENV HOST=0.0.0.0
-ENV PORT=8000
-ENV WORKERS=1
-
-EXPOSE ${PORT}
-
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 CMD curl -f http://localhost:${PORT}/health || exit 1
-
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["python", "-m", "app.run"]
